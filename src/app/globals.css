@@ -1,70 +1,152 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f172a;
-  --foreground: #f1f5f9;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --background: #fdfdfd;
+  --foreground: #1e293b;
+  --card: #ffffff;
+  --card-border: rgba(255, 255, 255, 0.5);
+  --muted: #64748b;
+  --primary: #4f46e5;
+  --primary-light: #818cf8;
+  --accent-blue: #0ea5e9;
+  --accent-green: #10b981;
+  --accent-amber: #f59e0b;
+  --accent-red: #ef4444;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.015em;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* MapLibre overrides */
-.maplibregl-popup-content {
-  background: rgb(30 41 59 / 0.95) !important;
-  color: white !important;
-  border-radius: 0.75rem !important;
-  padding: 0.75rem 1rem !important;
-  border: 1px solid rgb(71 85 105) !important;
-  backdrop-filter: blur(8px) !important;
+/* Glassmorphism Styles */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03),
+    0 0 0 1px rgba(0, 0, 0, 0.02);
 }
 
-.maplibregl-popup-tip {
-  border-top-color: rgb(30 41 59 / 0.95) !important;
+.glass-card {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+/* Premium Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: #0f172a;
+}
+
+/* Enhanced Slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 9999px;
+  /* Pill shape */
+  outline: none;
+  transition: background 0.3s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: 4px solid white;
+  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.4), 0 2px 4px -1px rgba(79, 70, 229, 0.2);
+  transition: transform 0.1s ease, box-shadow 0.2s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 8px -1px rgba(79, 70, 229, 0.5);
+}
+
+input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(0.95);
+  cursor: grabbing;
+}
+
+
+/* Heatmap Levels - used both in CSS and can be referenced */
+.status-success {
+  color: var(--accent-green);
+  background-color: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.status-info {
+  color: var(--accent-blue);
+  background-color: rgba(14, 165, 233, 0.1);
+  border-color: rgba(14, 165, 233, 0.2);
+}
+
+.status-warning {
+  color: var(--accent-amber);
+  background-color: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.status-danger {
+  color: var(--accent-red);
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+/* Map Controls Override */
 .maplibregl-ctrl-group {
-  background: rgb(30 41 59 / 0.9) !important;
-  border: 1px solid rgb(71 85 105) !important;
-  border-radius: 0.75rem !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  overflow: hidden;
 }
 
 .maplibregl-ctrl-group button {
-  border-color: rgb(71 85 105) !important;
+  width: 36px !important;
+  height: 36px !important;
 }
 
-.maplibregl-ctrl-group button:hover {
-  background: rgb(51 65 85) !important;
-}
-
-.maplibregl-ctrl-group button + button {
-  border-top: 1px solid rgb(71 85 105) !important;
-}
-
-/* Custom scrollbar */
+/* Scrollbar Polish */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgb(30 41 59);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgb(71 85 105);
-  border-radius: 4px;
+  background: #cbd5e1;
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(100 116 139);
+  background: #94a3b8;
+}
+
+/* Input Focus Ring */
+.input:focus-within {
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+  border-color: var(--primary);
 }

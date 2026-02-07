@@ -2,14 +2,13 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import JobSearch from '@/components/JobSearch';
-import WagePanel from '@/components/WagePanel';
+import Sidebar from '@/components/Sidebar';
 
 // Dynamically import map to avoid SSR issues with MapLibre
 const WageMap = dynamic(() => import('@/components/WageMap'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full bg-slate-800/50 rounded-2xl flex items-center justify-center">
+    <div className="w-full h-full bg-slate-100 flex items-center justify-center">
       <div className="animate-pulse text-slate-400">Loading map...</div>
     </div>
   ),
@@ -33,64 +32,124 @@ interface WageData {
 export default function Home() {
   const [selectedSoc, setSelectedSoc] = useState<SocCode | null>(null);
   const [selectedWage, setSelectedWage] = useState<WageData | null>(null);
-  const [salary, setSalary] = useState<number>(0);
+  const [hoveredWage, setHoveredWage] = useState<WageData | null>(null);
+  const [salary, setSalary] = useState<number>(120000);
+
+  // Show hovered wage if available, otherwise show selected
+  const displayedWage = hoveredWage || selectedWage;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Header */}
-      <header className="border-b border-slate-700/50 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                </svg>
+    <div className="h-screen flex flex-col bg-slate-50">
+      {/* Main content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar
+          onSocSelect={setSelectedSoc}
+          selectedSoc={selectedSoc}
+          salary={salary}
+          onSalaryChange={setSalary}
+          wageData={displayedWage}
+        />
+
+        {/* Map */}
+        <main className="flex-1 relative">
+          <WageMap
+            selectedSocCode={selectedSoc?.code || null}
+            salary={salary}
+            onAreaSelect={setSelectedWage}
+            onAreaHover={setHoveredWage}
+          />
+
+          {/* Selected Area Popup */}
+          {displayedWage && (
+            <div className={`absolute top-4 right-4 w-80 bg-white rounded-xl shadow-lg border overflow-hidden transition-all ${hoveredWage ? 'border-indigo-300' : 'border-slate-200'}`}>
+              <div className="p-4 border-b border-slate-100">
+                {selectedWage && !hoveredWage && (
+                  <button
+                    onClick={() => setSelectedWage(null)}
+                    className="absolute top-3 right-3 text-slate-400 hover:text-slate-600"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+                <div className="flex items-center gap-2">
+                  {hoveredWage && <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">Preview</span>}
+                  <h2 className="font-semibold text-slate-900 pr-6">{displayedWage.areaName}</h2>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">Your Base Offer: ${salary.toLocaleString()}</p>
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-white">H1B Wage Map</h1>
-                <p className="text-xs text-slate-400">DOL Prevailing Wage Data 2025-2026</p>
+
+              <div className="p-4 space-y-2">
+                {[
+                  { level: 4, hourly: displayedWage.level4 },
+                  { level: 3, hourly: displayedWage.level3 },
+                  { level: 2, hourly: displayedWage.level2 },
+                  { level: 1, hourly: displayedWage.level1 },
+                ].map(({ level, hourly }) => {
+                  const annual = hourly * 2080;
+                  const isCurrentLevel = salary >= annual && (level === 4 || salary < [0, displayedWage.level2, displayedWage.level3, displayedWage.level4, Infinity][level] * 2080);
+                  const diff = salary - annual;
+                  const diffPercent = Math.round((diff / annual) * 100);
+
+                  return (
+                    <div
+                      key={level}
+                      className={`flex items-center justify-between p-3 rounded-lg ${isCurrentLevel ? 'bg-indigo-50 border border-indigo-200' : 'bg-slate-50'
+                        }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full level-${level}`} />
+                        <span className={`text-sm ${isCurrentLevel ? 'font-medium text-indigo-700' : 'text-slate-600'}`}>
+                          Level {level === 1 ? 'I' : level === 2 ? 'II' : level === 3 ? 'III' : 'IV'}
+                        </span>
+                      </div>
+                      <div className="text-right flex flex-col items-end">
+                        <span className={`text-sm font-mono ${isCurrentLevel ? 'text-indigo-700 font-bold' : 'text-slate-700'}`}>
+                          ${annual.toLocaleString()}
+                        </span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full mt-0.5 inline-flex items-center gap-1 ${level >= 3 ? 'bg-emerald-100 text-emerald-700' :
+                            level === 2 ? 'bg-blue-100 text-blue-700' :
+                              'bg-amber-100 text-amber-700'
+                          }`}>
+                          {level}x Entry
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+
+              {/* Goal message */}
+              {salary > 0 && (() => {
+                const l1 = displayedWage.level1 * 2080;
+                const l2 = displayedWage.level2 * 2080;
+                const l3 = displayedWage.level3 * 2080;
+                const l4 = displayedWage.level4 * 2080;
+
+                let currentLevel = 1;
+                if (salary >= l4) currentLevel = 4;
+                else if (salary >= l3) currentLevel = 3;
+                else if (salary >= l2) currentLevel = 2;
+
+                if (currentLevel < 4) {
+                  const nextThreshold = [0, l2, l3, l4][currentLevel];
+                  const gap = nextThreshold - salary;
+                  return (
+                    <div className="px-4 pb-4">
+                      <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <span className="font-medium">Goal:</span> Raise offer by ${gap.toLocaleString()} to reach Level {currentLevel + 1}.
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Search */}
-        <div className="mb-6">
-          <JobSearch onSelect={setSelectedSoc} selectedSoc={selectedSoc} />
-        </div>
-
-        {/* Main content grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ minHeight: 'calc(100vh - 220px)' }}>
-          {/* Map - takes 2 columns */}
-          <div className="lg:col-span-2 min-h-[400px] lg:min-h-0">
-            <WageMap
-              selectedSocCode={selectedSoc?.code || null}
-              onAreaSelect={setSelectedWage}
-            />
-          </div>
-
-          {/* Wage panel - takes 1 column */}
-          <div className="lg:col-span-1">
-            <WagePanel
-              wageData={selectedWage}
-              salary={salary}
-              onSalaryChange={setSalary}
-            />
-          </div>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-700/50 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <p className="text-center text-sm text-slate-500">
-            Data from U.S. Department of Labor • Updated annually
-          </p>
-        </div>
-      </footer>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
