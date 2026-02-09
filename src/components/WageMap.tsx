@@ -145,8 +145,8 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
         });
 
         // Add controls
-        map.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
-
+        // Add controls
+        map.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
         map.current.on('load', () => {
             map.current!.addSource('counties', {
                 type: 'geojson',

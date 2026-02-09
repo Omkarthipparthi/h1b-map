@@ -62,26 +62,36 @@ export default function Home() {
 
           {/* Selected Area Popup */}
           {displayedWage && (
-            <div className={`absolute top-4 right-4 w-80 bg-white rounded-xl shadow-lg border overflow-hidden transition-all ${hoveredWage ? 'border-indigo-300' : 'border-slate-200'}`}>
-              <div className="p-4 border-b border-slate-100">
+            <div className={`
+              fixed md:absolute z-40 transition-all duration-300 ease-in-out bg-white shadow-2xl overflow-hidden
+              md:top-4 md:right-4 md:w-80 md:rounded-xl md:border md:border-slate-200 md:bottom-auto md:left-auto
+              bottom-0 left-0 right-0 rounded-t-3xl border-t border-slate-200
+              ${hoveredWage ? 'md:border-indigo-300' : 'md:border-slate-200'}
+            `}>
+              <div className="p-4 border-b border-slate-100 relative">
+                {/* Mobile Drag Handle */}
+                <div className="md:hidden w-full flex justify-center absolute top-2 left-0">
+                  <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
+                </div>
+
                 {selectedWage && !hoveredWage && (
                   <button
                     onClick={() => setSelectedWage(null)}
-                    className="absolute top-3 right-3 text-slate-400 hover:text-slate-600"
+                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 md:p-0"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-6 h-6 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 )}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mt-4 md:mt-0">
                   {hoveredWage && <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">Preview</span>}
-                  <h2 className="font-semibold text-slate-900 pr-6">{displayedWage.areaName}</h2>
+                  <h2 className="font-semibold text-slate-900 pr-6 text-lg md:text-base">{displayedWage.areaName}</h2>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">Your Base Offer: ${salary.toLocaleString()}</p>
+                <p className="text-sm text-slate-500 mt-0.5">Your Base Offer: ${salary.toLocaleString()}</p>
               </div>
 
-              <div className="p-4 space-y-2">
+              <div className="p-4 space-y-2 max-h-[50vh] overflow-y-auto md:max-h-none">
                 {[
                   { level: 4, hourly: displayedWage.level4 },
                   { level: 3, hourly: displayedWage.level3 },
@@ -110,8 +120,8 @@ export default function Home() {
                           ${annual.toLocaleString()}
                         </span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full mt-0.5 inline-flex items-center gap-1 ${level >= 3 ? 'bg-emerald-100 text-emerald-700' :
-                            level === 2 ? 'bg-blue-100 text-blue-700' :
-                              'bg-amber-100 text-amber-700'
+                          level === 2 ? 'bg-blue-100 text-blue-700' :
+                            'bg-amber-100 text-amber-700'
                           }`}>
                           {level}x Entry
                         </span>
@@ -137,7 +147,7 @@ export default function Home() {
                   const nextThreshold = [0, l2, l3, l4][currentLevel];
                   const gap = nextThreshold - salary;
                   return (
-                    <div className="px-4 pb-4">
+                    <div className="px-4 pb-8 md:pb-4">
                       <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
                         <span className="font-medium">Goal:</span> Raise offer by ${gap.toLocaleString()} to reach Level {currentLevel + 1}.
                       </p>
