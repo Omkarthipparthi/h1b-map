@@ -290,9 +290,12 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
         let currentHoverId: string | number | null = null;
 
         const mouseMoveHandler = (e: maplibregl.MapMouseEvent & { features?: maplibregl.GeoJSONFeature[] }) => {
+            // Disable hover on touch devices/mobile to prevent "flashing" behavior
+            if (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768) return;
+
             if (e.features && e.features.length > 0) {
                 const feature = e.features[0];
-                const featureId = feature.id;
+                const featureId = feature.id; // Corrected variable name
 
                 if (currentHoverId !== null && currentHoverId !== featureId) {
                     map.current!.setFeatureState({ source: 'counties', id: currentHoverId }, { hover: false });

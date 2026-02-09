@@ -86,7 +86,7 @@ export default function Home() {
                 )}
                 <div className="flex items-center gap-2 mt-4 md:mt-0">
                   {hoveredWage && <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">Preview</span>}
-                  <h2 className="font-semibold text-slate-900 pr-6 text-lg md:text-base">{displayedWage.areaName}</h2>
+                  <h2 className="font-semibold text-slate-900 pr-10 text-lg md:text-base">{displayedWage.areaName}</h2>
                 </div>
                 <p className="text-sm text-slate-500 mt-0.5">Your Base Offer: ${salary.toLocaleString()}</p>
               </div>
