@@ -33,5 +33,5 @@ yarn-error.log*
 next-env.d.ts
 
 # Raw data files (too large for git, regenerate with scripts/process-data.ts)
-data/
+/data/
 public/data/wages.json
