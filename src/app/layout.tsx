@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "VisaMap | Premium H1B Insights",
-  description: "Visualize H1B prevailing wages and visa probabilities.",
+  title: "H1b Wage Map | Premium H1B Insights",
+  description: "Maximize your salary potential with nationwide H1B wage insights.",
 };
 
 export default function RootLayout({
