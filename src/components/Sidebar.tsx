@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { WageData } from '@/utils/wage-helpers';
 
 // --- Interfaces ---
 interface SocCode {
@@ -9,13 +10,19 @@ interface SocCode {
     description: string;
 }
 
-interface WageData {
-    area: number;
-    areaName: string;
-    level1: number;
-    level2: number;
-    level3: number;
-    level4: number;
+interface CountyInfo {
+    county: string;
+    state: string;
+    stateAb: string;
+}
+
+interface AreaMapping {
+    name: string;
+    counties: CountyInfo[];
+}
+
+interface CountyMappingData {
+    [areaCode: string]: AreaMapping;
 }
 
 interface SidebarProps {
@@ -24,6 +31,8 @@ interface SidebarProps {
     salary: number;
     onSalaryChange: (salary: number) => void;
     wageData: WageData | null;
+    countyMapping: CountyMappingData | null;
+    onLocationSelect: (counties: string[]) => void;
 }
 
 // --- Helper Functions ---
@@ -47,12 +56,16 @@ function calculateWageLevel(salary: number, wageData: WageData): number {
 
 // --- Components ---
 
-export default function Sidebar({ onSocSelect, selectedSoc, salary, onSalaryChange, wageData }: SidebarProps) {
+export default function Sidebar({ onSocSelect, selectedSoc, salary, onSalaryChange, wageData, countyMapping, onLocationSelect }: SidebarProps) {
     const [query, setQuery] = useState('');
+    const [locationQuery, setLocationQuery] = useState('');
     const [socCodes, setSocCodes] = useState<SocCode[]>([]);
     const [isOpen, setIsOpen] = useState(false);
+    const [isLocationOpen, setIsLocationOpen] = useState(false);
     const [highlightIndex, setHighlightIndex] = useState(0);
+    const [locationHighlightIndex, setLocationHighlightIndex] = useState(0);
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const locationWrapperRef = useRef<HTMLDivElement>(null);
     const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(true); // Default open on mobile to show search
 
     // Load SOC codes
@@ -63,7 +76,7 @@ export default function Sidebar({ onSocSelect, selectedSoc, salary, onSalaryChan
             .catch(console.error);
     }, []);
 
-    // Filter results
+    // Filter results for Job Title
     const filteredResults = useMemo(() => {
         if (!query.trim()) return [];
         const lowerQuery = query.toLowerCase();
@@ -72,11 +85,57 @@ export default function Sidebar({ onSocSelect, selectedSoc, salary, onSalaryChan
             .slice(0, 8);
     }, [query, socCodes]);
 
+    // Filter results for Location
+    const filteredLocations = useMemo(() => {
+        if (!locationQuery.trim() || !countyMapping) return [];
+        const lowerQuery = locationQuery.toLowerCase();
+        const results: { label: string, type: 'County' | 'Area', counties: string[] }[] = [];
+
+        // Search in Area Names because county mapping keys are area codes, values have name
+        // We also want to search individual counties.
+
+        // Create a set to avoid duplicates
+        const seen = new Set<string>();
+
+        // 1. Search Counties
+        for (const area of Object.values(countyMapping)) {
+            for (const county of area.counties) {
+                const fullName = `${county.county}, ${county.stateAb}`;
+                if (fullName.toLowerCase().includes(lowerQuery) && !seen.has(fullName)) {
+                    results.push({
+                        label: fullName,
+                        type: 'County',
+                        counties: [`${county.county}::${county.stateAb}`] // Pass composite key
+                    });
+                    seen.add(fullName);
+                }
+            }
+        }
+
+        // 2. Search Areas
+        for (const area of Object.values(countyMapping)) {
+            if (area.name.toLowerCase().includes(lowerQuery) && !seen.has(area.name)) {
+                results.push({
+                    label: area.name,
+                    type: 'Area',
+                    counties: area.counties.map(c => `${c.county}::${c.stateAb}`)
+                });
+                seen.add(area.name);
+            }
+        }
+
+        return results.slice(0, 8);
+    }, [locationQuery, countyMapping]);
+
+
     // Click outside to close dropdown
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
                 setIsOpen(false);
+            }
+            if (locationWrapperRef.current && !locationWrapperRef.current.contains(event.target as Node)) {
+                setIsLocationOpen(false);
             }
         }
         document.addEventListener('mousedown', handleClickOutside);
@@ -87,6 +146,14 @@ export default function Sidebar({ onSocSelect, selectedSoc, salary, onSalaryChan
         onSocSelect(soc);
         setQuery('');
         setIsOpen(false);
+        // On mobile, keep open so they can select location if they want
+    };
+
+    const handleLocationSelect = (location: { label: string, counties: string[] }) => {
+        onLocationSelect(location.counties);
+        setLocationQuery(''); // Clear query
+        setIsLocationOpen(false);
+
         // On mobile, collapse sheet after selection to show map
         if (window.innerWidth < 768) {
             setIsMobileSheetOpen(false);
@@ -110,6 +177,27 @@ export default function Sidebar({ onSocSelect, selectedSoc, salary, onSalaryChan
                 break;
             case 'Escape':
                 setIsOpen(false);
+                break;
+        }
+    };
+
+    const handleLocationKeyDown = (e: React.KeyboardEvent) => {
+        if (!isLocationOpen) return;
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setLocationHighlightIndex((prev) => Math.min(prev + 1, filteredLocations.length - 1));
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setLocationHighlightIndex((prev) => Math.max(prev - 1, 0));
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (filteredLocations[locationHighlightIndex]) handleLocationSelect(filteredLocations[locationHighlightIndex]);
+                break;
+            case 'Escape':
+                setIsLocationOpen(false);
                 break;
         }
     };
@@ -222,6 +310,63 @@ export default function Sidebar({ onSocSelect, selectedSoc, salary, onSalaryChan
                                             >
                                                 <div className="font-medium">{soc.title}</div>
                                                 <div className="text-xs text-slate-400 font-mono mt-0.5">{soc.code}</div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Location Search */}
+                        <div ref={locationWrapperRef} className="relative group">
+                            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Location</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-pink-500 transition-colors">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                </span>
+                                <input
+                                    type="text"
+                                    value={locationQuery}
+                                    onChange={(e) => {
+                                        setLocationQuery(e.target.value);
+                                        setIsLocationOpen(true);
+                                    }}
+                                    onFocus={() => setIsLocationOpen(true)}
+                                    onKeyDown={handleLocationKeyDown}
+                                    placeholder="County or Area..."
+                                    className="w-full pl-11 pr-10 py-3 bg-white/50 border border-slate-200 rounded-xl focus:bg-white transition-all shadow-sm focus:shadow-md focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 outline-none text-slate-900 placeholder:text-slate-400"
+                                />
+                                {locationQuery && (
+                                    <button
+                                        onClick={() => {
+                                            setLocationQuery('');
+                                            onLocationSelect([]);
+                                        }}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-md transition-colors"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Location Dropdown Results */}
+                            {isLocationOpen && filteredLocations.length > 0 && (
+                                <div className="absolute z-50 w-full mt-2 bg-white/90 backdrop-blur-xl border border-slate-200/60 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <ul className="max-h-64 overflow-y-auto py-1">
+                                        {filteredLocations.map((loc, index) => (
+                                            <li
+                                                key={`${loc.label}-${index}`}
+                                                onClick={() => handleLocationSelect(loc)}
+                                                className={`px-4 py-3 cursor-pointer text-sm transition-colors border-b last:border-0 border-slate-50 ${index === locationHighlightIndex ? 'bg-pink-50 text-pink-700' : 'text-slate-700 hover:bg-slate-50'
+                                                    }`}
+                                            >
+                                                <div className="font-medium">{loc.label}</div>
+                                                <div className="text-xs text-slate-400 font-mono mt-0.5">{loc.type}</div>
                                             </li>
                                         ))}
                                     </ul>

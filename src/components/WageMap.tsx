@@ -1,56 +1,23 @@
-'use client';
-
 import { useEffect, useRef, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { AreaMapping, CountyMappingData, STATE_FIPS, buildCountyToAreaMap, WageData } from '../utils/wage-helpers';
 
-interface WageData {
-    area: number;
-    areaName: string;
-    level1: number;
-    level2: number;
-    level3: number;
-    level4: number;
-}
-
-interface CountyInfo {
+export interface WageSelection {
+    wage: WageData | null;
     county: string;
     state: string;
-    stateAb: string;
-}
-
-interface AreaMapping {
-    name: string;
-    counties: CountyInfo[];
-}
-
-interface CountyMappingData {
-    [areaCode: string]: AreaMapping;
-}
-
-// Build reverse lookup: county name -> area codes
-function buildCountyToAreaMap(data: CountyMappingData): Map<string, string[]> {
-    const map = new Map<string, string[]>();
-    for (const [areaCode, areaInfo] of Object.entries(data)) {
-        for (const county of areaInfo.counties) {
-            const key = county.county.toLowerCase().replace(/\s*(county|parish|municipio|borough|census area)\s*/gi, '').trim();
-            if (!map.has(key)) {
-                map.set(key, []);
-            }
-            map.get(key)!.push(areaCode);
-        }
-    }
-    return map;
 }
 
 interface WageMapProps {
     selectedSocCode: string | null;
     salary: number; // New prop for heatmap
-    onAreaSelect: (wage: WageData | null) => void;
-    onAreaHover?: (wage: WageData | null) => void;
+    focusedCounties?: string[]; // Array of "CountyName::StateAb"
+    onAreaSelect: (selection: WageSelection) => void;
+    onAreaHover?: (selection: WageSelection) => void;
 }
 
-export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaHover }: WageMapProps) {
+export default function WageMap({ selectedSocCode, salary, focusedCounties = [], onAreaSelect, onAreaHover }: WageMapProps) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<maplibregl.Map | null>(null);
     const [wageData, setWageData] = useState<WageData[]>([]);
@@ -58,6 +25,9 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
     const [mapReady, setMapReady] = useState(false);
     const [countyToArea, setCountyToArea] = useState<Map<string, string[]>>(new Map());
     const [hoveredCountyId, setHoveredCountyId] = useState<string | number | null>(null);
+
+    // Store loaded GeoJSON features for zooming
+    const geoJsonFeatures = useRef<any[]>([]);
 
     // Refs for event handlers
     const wageDataRef = useRef<WageData[]>([]);
@@ -79,18 +49,88 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
                 setCountyToArea(lookup);
             })
             .catch(console.error);
+
+        // Fetch GeoJSON explicitly to have access to features for zooming
+        fetch('https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json')
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.features) {
+                    geoJsonFeatures.current = data.features;
+                }
+            })
+            .catch(console.error);
     }, []);
 
+    // Handle zooming to focused counties
+    useEffect(() => {
+        if (!map.current || !focusedCounties || focusedCounties.length === 0 || geoJsonFeatures.current.length === 0) return;
+
+        const bounds = new maplibregl.LngLatBounds();
+        let found = false;
+
+        // Parse focusedCounties: "CountyName::StateAb"
+        // Normalize for comparison
+        const targets = focusedCounties.map(fc => {
+            const parts = fc.split('::');
+            if (parts.length < 2) return null;
+            return {
+                name: parts[0].toLowerCase().replace(/\s*(county|parish|municipio|borough|census area)\s*/gi, '').trim(),
+                stateFips: STATE_FIPS[parts[1]] || ''
+            };
+        }).filter(t => t !== null && t.stateFips);
+
+        if (targets.length === 0) return;
+
+        for (const feature of geoJsonFeatures.current) {
+            const featureName = (feature.properties.NAME || '').toLowerCase();
+            const featureState = feature.properties.STATE;
+
+            // Check if feature matches any target
+            for (const target of targets) {
+                if (target && featureState === target.stateFips && featureName === target.name) {
+                    if (feature.geometry.type === 'Polygon') {
+                        feature.geometry.coordinates.forEach((ring: any[]) => {
+                            ring.forEach((coord: any[]) => {
+                                bounds.extend(coord as [number, number]);
+                            });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        feature.geometry.coordinates.forEach((polygon: any[]) => {
+                            polygon.forEach((ring: any[]) => {
+                                ring.forEach((coord: any[]) => {
+                                    bounds.extend(coord as [number, number]);
+                                });
+                            });
+                        });
+                    }
+                    found = true;
+                }
+            }
+        }
+
+        if (found) {
+            map.current.fitBounds(bounds, {
+                padding: { top: 50, bottom: 50, left: 350, right: 50 }, // Padding for sidebar (left)
+                maxZoom: 10
+            });
+        }
+
+    }, [focusedCounties, mapReady]); // Depend on mapReady to ensure map exists
+
     // Find wage data for a county
-    const findWageForCounty = useCallback((countyName: string): WageData | null => {
+    const findWageForCounty = useCallback((countyName: string, stateFips?: string): WageData | null => {
         const currentWages = wageDataRef.current;
         const lookup = countyToAreaRef.current;
         const normalizedCounty = countyName.toLowerCase().trim();
 
         if (currentWages.length === 0) return null;
 
-        // Try county mapping first
-        const areaCodes = lookup.get(normalizedCounty);
+        // Try composite key first (Name::FIPS)
+        let areaCodes: string[] | undefined;
+        if (stateFips) {
+            areaCodes = lookup.get(`${normalizedCounty}::${stateFips}`);
+        }
+
         if (areaCodes && areaCodes.length > 0) {
             for (const areaCode of areaCodes) {
                 const match = currentWages.find(w => w.area === parseInt(areaCode, 10));
@@ -98,13 +138,7 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
             }
         }
 
-        // Fallback: direct name match
-        const directMatch = currentWages.find(w =>
-            w.areaName.toLowerCase().includes(normalizedCounty) ||
-            normalizedCounty.includes(w.areaName.split(',')[0].toLowerCase())
-        );
-
-        return directMatch || null;
+        return null;
     }, []);
 
     // Initialize map
@@ -145,8 +179,8 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
         });
 
         // Add controls
-        // Add controls
         map.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
         map.current.on('load', () => {
             map.current!.addSource('counties', {
                 type: 'geojson',
@@ -211,22 +245,8 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
             return;
         }
 
-        // Build a match expression for performant coloring
-        // We match County Name -> Heatmap Color
-        // Note: For 3000 counties this expression can be large but MapLibre handles it well usually.
-        // If performance degrades, we moved to feature-state based coloring.
-
-        // Strategy: We will match on county NAME for simplicity since we don't have FIPS in wage data easily without more mapping.
-        // Ideally we'd use FIPS. Using NAME is a decent approximation for this UI demo.
-
         const matchExpression: any[] = ['match', ['get', 'NAME']];
         const lookup = countyToAreaRef.current;
-
-        // Colors
-        // Success (Green): > Level 3
-        // Info (Blue): > Level 2
-        // Warning (Amber): > Level 1
-        // Danger (Red): < Level 1
 
         // Pre-calculate area status
         const areaStatus = new Map<number, string>();
@@ -243,11 +263,18 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
             areaStatus.set(wage.area, color);
         }
 
-        // Build the expression
-        // Iterate through all mapped counties and assign color
-        let hasmatches = false;
-        lookup.forEach((areaCodes, countyName) => {
-            // Find matching wage
+        // Group colors by County Name -> Array of { stateFips, color }
+        const nameGroups = new Map<string, Array<{ fips: string, color: string }>>();
+
+        lookup.forEach((areaCodes, key) => {
+            // key is "normalized_name::stateFips"
+            const parts = key.split('::');
+            const name = parts[0];
+            const fips = parts[1]; // might be undefined if key format is wrong, but we enforce it now
+
+            if (!name || !fips) return;
+
+            // Find matching wage color
             let color = null;
             for (const code of areaCodes) {
                 const c = areaStatus.get(parseInt(code));
@@ -258,20 +285,41 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
             }
 
             if (color) {
-                // MapLibre match expects exact string. Our map keys are lowercase. 
-                // The GeoJSON has Title Case typically. We can't easily transform inside expression.
-                // This is a limitation. We will do a best effort with Title Case reconstruction or use a known list.
-                // Actually, let's try to match loosely or skip if too complex.
+                const titleCase = name.replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase())));
 
-                // Better approach: Iterate the GeoJSON? No, too slow.
-                // Let's assume standard Title Case for counties in GeoJSON.
-                const titleCase = countyName.replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase())));
-                matchExpression.push(titleCase, color);
-                hasmatches = true;
+                if (!nameGroups.has(titleCase)) {
+                    nameGroups.set(titleCase, []);
+                }
+                nameGroups.get(titleCase)!.push({ fips, color });
             }
         });
 
-        matchExpression.push('#e2e8f0'); // Default fallback
+        // Build the expression
+        let hasmatches = false;
+
+        nameGroups.forEach((entries, name) => {
+            if (entries.length === 1) {
+                // Simple case: unique name
+                matchExpression.push(name, entries[0].color);
+            } else {
+                // Collision case: multiple states have this county name
+                // Use nested match on STATE
+                const stateMatch: any[] = ['match', ['get', 'STATE']];
+
+                // Add branches for each state FIPS
+                entries.forEach(entry => {
+                    stateMatch.push(entry.fips, entry.color);
+                });
+
+                // Default color for this name if state doesn't match known ones (shouldn't happen)
+                stateMatch.push('#e2e8f0');
+
+                matchExpression.push(name, stateMatch);
+            }
+            hasmatches = true;
+        });
+
+        matchExpression.push('#e2e8f0'); // Default fallback for unknown names
 
         if (hasmatches) {
             map.current.setPaintProperty('counties-fill', 'fill-color', matchExpression);
@@ -295,7 +343,7 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
 
             if (e.features && e.features.length > 0) {
                 const feature = e.features[0];
-                const featureId = feature.id; // Corrected variable name
+                const featureId = feature.id;
 
                 if (currentHoverId !== null && currentHoverId !== featureId) {
                     map.current!.setFeatureState({ source: 'counties', id: currentHoverId }, { hover: false });
@@ -307,9 +355,11 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
                     setHoveredCountyId(featureId);
 
                     const countyName = feature.properties?.NAME || '';
-                    const wage = findWageForCounty(countyName);
+                    const stateFips = feature.properties?.STATE || ''; // Get state FIPS
+
+                    const wage = findWageForCounty(countyName, stateFips);
                     if (onAreaHoverRef.current) {
-                        onAreaHoverRef.current(wage);
+                        onAreaHoverRef.current({ wage, county: countyName, state: stateFips });
                     }
                 }
                 map.current!.getCanvas().style.cursor = 'pointer';
@@ -323,14 +373,16 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
             currentHoverId = null;
             setHoveredCountyId(null);
             map.current!.getCanvas().style.cursor = '';
-            if (onAreaHoverRef.current) onAreaHoverRef.current(null);
+            if (onAreaHoverRef.current) onAreaHoverRef.current({ wage: null, county: '', state: '' });
         };
 
         const clickHandler = (e: maplibregl.MapMouseEvent & { features?: maplibregl.GeoJSONFeature[] }) => {
-            if (e.features && e.features[0]) {
+            if (e.features && e.features.length > 0) {
                 const countyName = e.features[0].properties?.NAME || '';
-                const wage = findWageForCounty(countyName);
-                onAreaSelectRef.current(wage);
+                const stateFips = e.features[0].properties?.STATE || '';
+                const wage = findWageForCounty(countyName, stateFips);
+
+                onAreaSelectRef.current({ wage, county: countyName, state: stateFips });
             }
         };
 
@@ -349,7 +401,7 @@ export default function WageMap({ selectedSocCode, salary, onAreaSelect, onAreaH
     useEffect(() => {
         if (!selectedSocCode) {
             setWageData([]);
-            onAreaSelect(null);
+            onAreaSelect({ wage: null, county: '', state: '' });
             return;
         }
 

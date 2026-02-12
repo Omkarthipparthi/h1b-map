@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Sidebar from '@/components/Sidebar';
+import { WageData, CountyMappingData, STATE_FIPS } from '@/utils/wage-helpers';
 
 // Dynamically import map to avoid SSR issues with MapLibre
 const WageMap = dynamic(() => import('@/components/WageMap'), {
@@ -20,23 +21,60 @@ interface SocCode {
   description: string;
 }
 
-interface WageData {
-  area: number;
-  areaName: string;
-  level1: number;
-  level2: number;
-  level3: number;
-  level4: number;
+// Helper to get state abbreviation
+function getStateAb(fips: string): string {
+  const entry = Object.entries(STATE_FIPS).find(([k, v]) => v === fips);
+  return entry ? entry[0] : '';
 }
 
 export default function Home() {
   const [selectedSoc, setSelectedSoc] = useState<SocCode | null>(null);
+
+  // Selection State
   const [selectedWage, setSelectedWage] = useState<WageData | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<{ county: string, state: string } | null>(null);
+
+  // Hover State
   const [hoveredWage, setHoveredWage] = useState<WageData | null>(null);
+  const [hoveredLocation, setHoveredLocation] = useState<{ county: string, state: string } | null>(null);
+
   const [salary, setSalary] = useState<number>(120000);
+
+  // Location Search State
+  const [countyMapping, setCountyMapping] = useState<CountyMappingData | null>(null);
+  const [focusedCounties, setFocusedCounties] = useState<string[]>([]);
+
+  // Load county mapping data
+  useEffect(() => {
+    fetch('/data/county-mapping.json')
+      .then((res) => res.json())
+      .then((data: CountyMappingData) => {
+        setCountyMapping(data);
+      })
+      .catch(console.error);
+  }, []);
 
   // Show hovered wage if available, otherwise show selected
   const displayedWage = hoveredWage || selectedWage;
+  const displayedLocation = hoveredWage ? hoveredLocation : selectedLocation;
+
+  const handleAreaSelect = (selection: { wage: WageData | null, county: string, state: string }) => {
+    setSelectedWage(selection.wage);
+    if (selection.wage) {
+      setSelectedLocation({ county: selection.county, state: selection.state });
+    } else {
+      setSelectedLocation(null);
+    }
+  };
+
+  const handleAreaHover = (selection: { wage: WageData | null, county: string, state: string }) => {
+    setHoveredWage(selection.wage);
+    if (selection.wage) {
+      setHoveredLocation({ county: selection.county, state: selection.state });
+    } else {
+      setHoveredLocation(null);
+    }
+  };
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
@@ -49,6 +87,8 @@ export default function Home() {
           salary={salary}
           onSalaryChange={setSalary}
           wageData={displayedWage}
+          countyMapping={countyMapping}
+          onLocationSelect={setFocusedCounties}
         />
 
         {/* Map */}
@@ -56,8 +96,9 @@ export default function Home() {
           <WageMap
             selectedSocCode={selectedSoc?.code || null}
             salary={salary}
-            onAreaSelect={setSelectedWage}
-            onAreaHover={setHoveredWage}
+            onAreaSelect={handleAreaSelect}
+            onAreaHover={handleAreaHover}
+            focusedCounties={focusedCounties}
           />
 
           {/* Selected Area Popup */}
@@ -76,7 +117,7 @@ export default function Home() {
 
                 {selectedWage && !hoveredWage && (
                   <button
-                    onClick={() => setSelectedWage(null)}
+                    onClick={() => { setSelectedWage(null); setSelectedLocation(null); }}
                     className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 md:p-0"
                   >
                     <svg className="w-6 h-6 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -84,11 +125,20 @@ export default function Home() {
                     </svg>
                   </button>
                 )}
-                <div className="flex items-center gap-2 mt-4 md:mt-0">
-                  {hoveredWage && <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded">Preview</span>}
-                  <h2 className="font-semibold text-slate-900 pr-10 text-lg md:text-base">{displayedWage.areaName}</h2>
+                <div className="flex flex-col gap-1 mt-4 md:mt-0">
+                  <div className="flex items-center gap-2">
+                    {hoveredWage && <span className="text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-medium">Preview</span>}
+                    {displayedLocation && (
+                      <h2 className="font-bold text-slate-900 text-lg md:text-xl">
+                        {displayedLocation.county}, {getStateAb(displayedLocation.state)}
+                      </h2>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 font-medium pl-0.5 max-w-[90%] truncate">
+                    {displayedWage.areaName}
+                  </div>
                 </div>
-                <p className="text-sm text-slate-500 mt-0.5">Your Base Offer: ${salary.toLocaleString()}</p>
+                <p className="text-sm text-slate-500 mt-2 font-medium">Base Offer: <span className="text-slate-700">${salary.toLocaleString()}</span></p>
               </div>
 
               <div className="p-4 space-y-2 max-h-[50vh] overflow-y-auto md:max-h-none">
